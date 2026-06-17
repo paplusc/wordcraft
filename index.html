@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordCraft Daily</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap');
+
+  :root {
+    --bg: #0F1623;
+    --surface: #1A2235;
+    --surface2: #212d42;
+    --cream: #F5EDD6;
+    --gold: #D4AF37;
+    --gold-dim: #a88a28;
+    --red: #E05252;
+    --green: #4CAF7D;
+    --text: #E8DFC8;
+    --text-dim: #7A8BA0;
+    --tile-bg: #F0E6C8;
+    --tile-border: #C8B87A;
+    --tile-shadow: #8a7a40;
+    --slot-bg: #141e2e;
+    --slot-border: #2a3a55;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 40px;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; width: 100%; max-width: 640px; flex-direction: column; align-items: center; }
+  .screen.active { display: flex; }
+
+  /* ── LOGO ── */
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 6vw, 3rem);
+    font-weight: 900;
+    color: var(--cream);
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .logo span { color: var(--gold); }
+  .tagline {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--slot-border);
+    border-radius: 16px;
+    padding: 28px;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  .card-title { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--cream); margin-bottom: 6px; }
+  .card-sub { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 22px; line-height: 1.55; }
+
+  /* ── FORMS ── */
+  .field-label { font-size: 0.72rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 7px; display: block; }
+  input[type="text"] {
+    width: 100%;
+    background: var(--slot-bg);
+    border: 1px solid var(--slot-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: var(--cream);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--gold); }
+  input.error { border-color: var(--red); }
+  .field-error { font-size: 0.75rem; color: var(--red); margin-top: 5px; display: none; }
+  .field-error.show { display: block; }
+  .field-group { margin-bottom: 16px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    padding: 13px 24px; border-radius: 10px;
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 0.9rem;
+    border: none; cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s, background 0.15s;
+    letter-spacing: 0.3px; width: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--gold); color: #1a1200; }
+  .btn-primary:hover { background: #e0bc3a; }
+  .btn-primary:disabled { opacity: 0.4; cursor: default; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--slot-border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+  .btn-danger { background: rgba(224,82,82,0.12); color: var(--red); border: 1px solid rgba(224,82,82,0.3); }
+  .btn-sm { padding: 7px 14px; font-size: 0.78rem; width: auto; border-radius: 7px; }
+  .divider { border: none; border-top: 1px solid var(--slot-border); margin: 20px 0; }
+
+  /* ── AUTH SCREEN ── */
+  .auth-wrap { text-align: center; margin-bottom: 32px; }
+  .deco-tiles { display: flex; gap: 8px; justify-content: center; margin: 20px 0 28px; opacity: 0.65; }
+  .deco-tile {
+    width: 44px; height: 44px; background: var(--tile-bg); border: 2px solid var(--tile-border);
+    border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 3px 0 var(--tile-shadow);
+  }
+  .deco-tile .tl { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; color: #2a1f00; line-height: 1; }
+  .deco-tile .tp { font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700; color: #5a4800; }
+
+  /* ── GAME HEADER ── */
+  header { text-align: center; margin-bottom: 24px; width: 100%; max-width: 640px; }
+  .user-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 0 2px; gap: 12px; }
+  .date-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--slot-border);
+    border-radius: 20px; padding: 4px 14px;
+    font-size: 0.75rem; color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .date-badge .dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%;}
+  .streak-badge {
+    display: none; align-items: center; gap: 5px;
+    background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 0.72rem; color: var(--gold);
+    font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+  }
+  .streak-badge.active { display: inline-flex; }
+  .user-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--surface); border: 1px solid var(--slot-border);
+    border-radius: 20px; padding: 5px 12px 5px 7px;
+    font-size: 0.78rem; color: var(--text-dim); cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .user-pill:hover { border-color: var(--gold); color: var(--text); }
+  .user-avatar {
+    width: 22px; height: 22px; background: var(--gold); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; font-weight: 700; color: #1a1200; flex-shrink: 0;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label { font-size: 0.68rem; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 14px; }
+
+  /* ── TILES ── */
+  .tiles-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 6px; }
+  .tile {
+    width: 58px; height: 58px; background: var(--tile-bg); border: 2px solid var(--tile-border);
+    border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative;
+    box-shadow: 0 4px 0 var(--tile-shadow), 0 6px 12px rgba(0,0,0,0.4);
+    transition: transform 0.1s, box-shadow 0.1s, opacity 0.2s; user-select: none; flex-shrink: 0;
+  }
+  .tile:hover:not(.used) { transform: translateY(-3px); box-shadow: 0 7px 0 var(--tile-shadow), 0 10px 20px rgba(0,0,0,0.4); }
+  .tile:active:not(.used) { transform: translateY(2px); box-shadow: 0 2px 0 var(--tile-shadow), 0 4px 8px rgba(0,0,0,0.4); }
+  .tile.used { opacity: 0.28; cursor: default; box-shadow: 0 2px 0 var(--tile-shadow); }
+  .tile-letter { font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700; color: #2a1f00; line-height: 1; }
+  .tile-points { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700; color: #5a4800; position: absolute; bottom: 4px; right: 6px; }
+
+  /* ── WORD AREA ── */
+  .word-area {
+    min-height: 70px; background: var(--slot-bg); border: 2px dashed var(--slot-border);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 10px; flex-wrap: wrap; margin-bottom: 16px; transition: border-color 0.2s;
+  }
+  .word-area.has-word { border-style: solid; border-color: var(--gold); }
+  .word-area .placeholder { color: var(--text-dim); font-size: 0.8rem; letter-spacing: 1.5px; }
+  .slot-tile {
+    width: 52px; height: 52px; background: var(--tile-bg); border: 2px solid var(--gold);
+    border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; box-shadow: 0 3px 0 var(--gold-dim);
+    animation: popIn 0.15s ease-out; flex-shrink: 0;
+  }
+  .slot-tile:hover { border-color: var(--red); box-shadow: 0 3px 0 #b03a3a; }
+  .slot-tile .tile-letter { font-size: 1.4rem; }
+  .slot-tile .tile-points { font-size: 0.55rem; }
+
+  /* ── CONTROLS ── */
+  .controls { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+  .btn-clear {
+    padding: 12px 20px; border-radius: 10px; font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 0.88rem; border: 1px solid var(--slot-border);
+    background: var(--surface2); color: var(--text-dim); cursor: pointer;
+    transition: transform 0.1s, color 0.15s; flex-shrink: 0;
+  }
+  .btn-clear:hover { color: var(--text); }
+  .btn-clear:active { transform: scale(0.97); }
+  .btn-submit {
+    flex: 1; padding: 12px 20px; border-radius: 10px; font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 0.88rem; border: none; background: var(--gold);
+    color: #1a1200; cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+  }
+  .btn-submit:disabled { opacity: 0.35; cursor: default; }
+  .btn-submit:not(:disabled):active { transform: scale(0.97); }
+
+  /* ── SCORE DISPLAY ── */
+  .score-display {
+    display: flex; align-items: center; gap: 12px; background: var(--surface2);
+    border-radius: 10px; padding: 10px 16px; border: 1px solid var(--slot-border); margin-bottom: 12px;
+  }
+  .score-num { font-family: 'JetBrains Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--gold); min-width: 48px; text-align: center; }
+  .score-label { font-size: 0.72rem; color: var(--text-dim); }
+  .score-word { font-family: 'Playfair Display', serif; font-size: 1rem; color: var(--cream); text-transform: uppercase; letter-spacing: 2px; }
+
+  /* ── RESULT BANNER ── */
+  .result-banner { display: none; padding: 16px 20px; border-radius: 12px; margin-bottom: 16px; border: 1px solid; animation: slideIn 0.3s ease-out; }
+  .result-banner.valid { background: rgba(76,175,125,0.1); border-color: var(--green); display: block; }
+  .result-banner.invalid { background: rgba(224,82,82,0.1); border-color: var(--red); display: block; }
+  .result-banner .rt { font-family: 'Playfair Display', serif; font-size: 1.05rem; font-weight: 700; margin-bottom: 3px; }
+  .result-banner.valid .rt { color: var(--green); }
+  .result-banner.invalid .rt { color: var(--red); }
+  .result-banner .rs { font-size: 0.8rem; color: var(--text-dim); }
+
+  /* ── ALREADY PLAYED ── */
+  .played-banner {
+    background: rgba(76,175,125,0.07); border: 1px solid var(--green); border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 16px; width: 100%; max-width: 640px; display: none;
+  }
+  .played-banner h4 { color: var(--green); font-size: 0.9rem; margin-bottom: 3px; }
+  .played-banner p { font-size: 0.79rem; color: var(--text-dim); }
+
+  /* ── LEADERBOARD ── */
+  .lb-row {
+    display: grid; grid-template-columns: 32px 1fr auto;
+    gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px;
+    margin-bottom: 4px; background: var(--slot-bg); font-size: 0.85rem; transition: background 0.15s;
+  }
+  .lb-row:hover { background: var(--surface2); }
+  .lb-row.me { background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.2); }
+  .lb-rank { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-dim); text-align: center; }
+  .lb-rank.r1 { color: var(--gold); font-weight: 700; }
+  .lb-rank.r2 { color: #C0C0C0; }
+  .lb-rank.r3 { color: #CD7F32; }
+  .lb-name { color: var(--cream); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .lb-score { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--gold); text-align: right; white-space: nowrap; }
+  .lb-score .lb-games { display: block; font-size: 0.65rem; font-weight: 400; color: var(--text-dim); margin-top: 1px; }
+  .lb-empty { text-align: center; color: var(--text-dim); font-size: 0.82rem; padding: 24px 0; }
+  .lb-loading { text-align: center; color: var(--text-dim); font-size: 0.8rem; padding: 20px 0; animation: pulse 1.5s ease-in-out infinite; }
+
+  /* ── POINT REF ── */
+  .point-ref { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .point-chip { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 2px 7px; background: var(--slot-bg); border: 1px solid var(--slot-border); border-radius: 4px; color: var(--text-dim); }
+  .point-chip b { color: var(--text); }
+
+  /* ── MODALS ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--slot-border); border-radius: 16px;
+    padding: 28px; width: 100%; max-width: 420px; animation: popIn 0.2s ease-out;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--cream); margin-bottom: 6px; }
+  .modal > p { font-size: 0.83rem; color: var(--text-dim); margin-bottom: 18px; line-height: 1.5; }
+  .modal-score { background: var(--surface2); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 18px; }
+  .modal-score .big { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: var(--gold); }
+  .modal-score .small { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn { flex: 1; }
+
+  /* ── ACCOUNT MODAL ── */
+  .acct-row { background: var(--slot-bg); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+  .acct-row .label { font-size: 0.68rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 3px; }
+  .acct-row .value { font-size: 0.9rem; color: var(--cream); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .acct-section-title { font-size: 0.78rem; font-weight: 600; color: var(--text); margin: 18px 0 10px; letter-spacing: 0.3px; }
+
+  /* ── USERNAME CHECK ── */
+  .uname-check { font-size: 0.77rem; margin-top: 5px; display: none; }
+  .uname-check.ok { color: var(--green); display: block; }
+  .uname-check.bad { color: var(--red); display: block; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface); border: 1px solid var(--slot-border);
+    border-radius: 10px; padding: 10px 20px; font-size: 0.83rem; color: var(--text);
+    z-index: 300; transition: transform 0.3s ease; white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--green); }
+  .toast.error { border-color: var(--red); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes popIn { from { transform: scale(0.75); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes slideIn { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .fade-in { animation: fadeIn 0.35s ease-out; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SCREEN: AUTH / WELCOME
+══════════════════════════════════════════ -->
+<div class="screen" id="screen-auth">
+  <div class="auth-wrap">
+    <div class="logo">Word<span>Craft</span></div>
+    <div class="tagline">Daily Word Challenge</div>
+  </div>
+
+  <div class="deco-tiles">
+    <div class="deco-tile"><span class="tl">W</span><span class="tp">4</span></div>
+    <div class="deco-tile"><span class="tl">O</span><span class="tp">1</span></div>
+    <div class="deco-tile"><span class="tl">R</span><span class="tp">1</span></div>
+    <div class="deco-tile"><span class="tl">D</span><span class="tp">2</span></div>
+    <div class="deco-tile"><span class="tl">S</span><span class="tp">1</span></div>
+  </div>
+
+  <div class="card fade-in" style="max-width:420px;">
+    <h2 class="card-title">Welcome</h2>
+    <p class="card-sub">Enter a username to continue your progress, or leave blank to play as a random new guest.</p>
+
+    <div class="field-group">
+      <label class="field-label" for="auth-username">Username</label>
+      <input type="text" id="auth-username" placeholder="e.g. WordWizard" maxlength="20" onkeydown="if(event.key==='Enter')loginOrPlay()">
+      <div class="field-error" id="auth-username-err">3–20 chars, letters/numbers/underscores only.</div>
+    </div>
+    
+    <button class="btn btn-primary" id="start-btn" onclick="loginOrPlay()">Start Playing</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN: GAME
+══════════════════════════════════════════ -->
+<div class="screen" id="screen-game">
+  <header>
+    <div class="logo">Word<span>Craft</span></div>
+    <div class="tagline">Daily Word Challenge</div>
+    <div class="user-bar">
+      <div class="date-badge"><span class="dot"></span><span id="date-display"></span></div>
+      <div class="user-pill" onclick="openAccountModal()" title="Account">
+        <div class="user-avatar" id="header-avatar">?</div>
+        <span id="header-username">…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- already-played banner -->
+  <div id="played-banner" class="played-banner">
+    <h4>✓ You've already played today!</h4>
+    <p>You played <strong id="played-word"></strong> for <strong id="played-score"></strong> pts. Come back tomorrow!</p>
+  </div>
+
+  <!-- GAME CARD -->
+  <div class="card" id="game-card">
+    <div class="section-label">Today's Letters — click to build your word</div>
+    <div class="tiles-grid" id="tiles-grid"></div>
+
+    <hr class="divider">
+
+    <div class="section-label">Your Word</div>
+    <div class="word-area" id="word-area">
+      <span class="placeholder">Click letters above to spell a word</span>
+    </div>
+
+    <div id="result-banner" class="result-banner"></div>
+
+    <div class="score-display">
+      <div>
+        <div class="score-label" style="display:flex; align-items:center; gap:8px;">
+          Score
+          <div class="streak-badge" id="streak-badge" style="padding: 2px 8px; font-size: 0.65rem;">🔥 <span id="streak-count">1</span>d · <span id="streak-multiplier">1.0</span>x</div>
+        </div>
+        <div class="score-num" id="live-score">0</div>
+      </div>
+      <div style="border-left:1px solid var(--slot-border);padding-left:12px;flex:1;">
+        <div class="score-label">Word</div>
+        <div class="score-word" id="live-word">—</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-clear" onclick="clearWord()">Clear</button>
+      <button class="btn-submit" id="submit-btn" onclick="submitWord()" disabled>Submit Word</button>
+    </div>
+
+    <hr class="divider">
+    <div class="section-label">Scrabble Point Values</div>
+    <div class="point-ref" id="point-ref"></div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="section-label" style="margin:0;">All-Time Leaderboard</div>
+      <button class="btn btn-sm btn-ghost" onclick="loadLeaderboard()">↻</button>
+    </div>
+    <div id="lb-list"><div class="lb-loading">Loading scores…</div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL: SUBMIT SCORE
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-submit">
+  <div class="modal">
+    <h3>Submit your score</h3>
+    <p>Your result will be posted to the all-time leaderboard as <strong id="submit-username-display" style="color:var(--cream);"></strong>.</p>
+    <div class="modal-score">
+      <div class="big" id="modal-score-num">0</div>
+      <div class="small" id="modal-word-display">WORD</div>
+      <div id="modal-streak-info" style="display:none;margin-top:8px;font-size:0.75rem;color:var(--gold);font-family:'JetBrains Mono',monospace;"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeSubmitModal()">Cancel</button>
+      <button class="btn btn-primary" id="confirm-submit-btn" onclick="confirmSubmit()">Post Score</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL: ACCOUNT
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-account">
+  <div class="modal">
+    <h3>Your Account</h3>
+
+    <div id="acct-general">
+      <div class="acct-row">
+        <div class="label">Playing as</div>
+        <div class="value"><span id="acct-current-username"></span></div>
+      </div>
+      <p style="font-size:0.81rem;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">
+        To log back in on another device, simply type your username exactly as it is on the welcome screen.
+      </p>
+
+      <div class="acct-section-title">Change username</div>
+      <div class="field-group">
+        <input type="text" id="change-username" placeholder="New username" maxlength="20" oninput="checkChangeUsername()">
+        <div class="uname-check" id="change-uname-check"></div>
+      </div>
+      <button class="btn btn-primary" id="change-uname-btn" onclick="saveChangeUsername()" style="margin-bottom:10px;">Save Username</button>
+      <button class="btn btn-danger" onclick="signOut()">Log Out</button>
+    </div>
+
+    <div style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeAccountModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  CONFIG  —  replace with your Supabase project values
+// ════════════════════════════════════════════════════════════════
+const SUPABASE_URL     = 'https://klgwoptjhewdzcvpyvkw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_5T3nxxvl8G4SWhz4ZizhKQ_rxTFRRtB';
+
+/*
+  ── Supabase SQL setup (Simplified for Guest-only flow) ──────────
+
+  (If you've already created the tables from the previous version, 
+   no structural DB changes are strictly needed, but email/auth policies are no longer used).
+*/
+
+// ════════════════════════════════════════════════════════════════
+//  SCRABBLE DATA
+// ════════════════════════════════════════════════════════════════
+const LETTER_VALUES = {
+  A:1,E:1,I:1,O:1,U:1,L:1,N:1,S:1,T:1,R:1,
+  D:2,G:2, B:3,C:3,M:3,P:3,
+  F:4,H:4,V:4,W:4,Y:4, K:5, J:8,X:8, Q:10,Z:10
+};
+const LETTER_POOL = 'AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ'.split('');
+const WORD_ADJECTIVES = ['Swift','Bold','Bright','Clever','Sharp','Wild','Calm','Wise','Quick','Grand'];
+const WORD_NOUNS      = ['Fox','Owl','Bear','Wolf','Hawk','Lion','Deer','Crow','Lynx','Hare'];
+
+// ════════════════════════════════════════════════════════════════
+//  HELPERS — daily letters
+// ════════════════════════════════════════════════════════════════
+function getDayString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function seededRng(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xFFFFFFFF; return (s >>> 0) / 0xFFFFFFFF; };
+}
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+function getTodaysLetters() {
+  const rng = seededRng(hashStr(getDayString() + 'wordcraft'));
+  const pool = [...LETTER_POOL];
+  const out = [];
+  for (let i = 0; i < 10; i++) { const idx = Math.floor(rng() * pool.length); out.push(pool.splice(idx,1)[0]); }
+  return out;
+}
+function getYesterdayString() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  GUEST ID & RANDOM USERNAME
+// ════════════════════════════════════════════════════════════════
+function generateGuestId() {
+  return 'g_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+}
+function generateGuestUsername() {
+  const adj  = WORD_ADJECTIVES[Math.floor(Math.random() * WORD_ADJECTIVES.length)];
+  const noun = WORD_NOUNS[Math.floor(Math.random() * WORD_NOUNS.length)];
+  const num  = String(Math.floor(Math.random() * 9000) + 1000);
+  return `${adj}${noun}${num}`;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════
+const TODAY   = getDayString();
+const LETTERS = getTodaysLetters();
+let wordTiles       = [];
+let pendingScore    = null;
+let currentStreak   = 1;
+
+let guestId      = null;   
+let username     = null;   
+
+// ════════════════════════════════════════════════════════════════
+//  STREAK HELPERS (DATABASE BACKED)
+// ════════════════════════════════════════════════════════════════
+async function fetchDatabaseStreak() {
+  if (!guestId) return 1;
+
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?player_key=eq.${guestId}&select=streak_count,streak_last_date`,
+      {
+        headers: { 'apikey': SUPABASE_ANON_KEY }
+      }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const record = data[0];
+        const lastDate = record.streak_last_date; // YYYY-MM-DD
+        const yesterday = getYesterdayString();
+
+        // If the streak is still current
+        if (lastDate === TODAY || lastDate === yesterday) {
+          return record.streak_count || 1;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching streak from database:', err);
+  }
+  return 1;
+}
+
+function getMultiplier(streak) {
+  return 1.0 + (streak - 1) * 0.1;
+}
+
+function renderStreakBadge(streak) {
+  const badge = document.getElementById('streak-badge');
+  if (streak <= 1) { badge.classList.remove('active'); return; }
+  document.getElementById('streak-count').textContent      = streak;
+  document.getElementById('streak-multiplier').textContent = getMultiplier(streak).toFixed(1);
+  badge.classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  BOOT  —  runs on page load
+// ════════════════════════════════════════════════════════════════
+(async () => {
+  // Existing guest session?
+  const guest = JSON.parse(localStorage.getItem('wc_guest') || 'null');
+  if (guest && guest.guestId && guest.username) {
+    guestId  = guest.guestId;
+    username = guest.username;
+    upsertGuest(guestId, username);   // refresh last_seen in DB asynchronously
+    await enterGame();
+    return;
+  }
+
+  // Brand-new visitor → show simple username login screen
+  showScreen('screen-auth');
+})();
+
+// ════════════════════════════════════════════════════════════════
+//  FRICTIONLESS LOGIN & GUEST CREATION
+// ════════════════════════════════════════════════════════════════
+async function loginOrPlay() {
+  let uname = document.getElementById('auth-username').value.trim();
+  const btn = document.getElementById('start-btn');
+  btn.disabled = true; btn.textContent = 'Loading...';
+
+  // If left blank, generate random guest
+  if (!uname) {
+    uname = generateGuestUsername();
+    await createNewGuest(uname);
+    return;
+  }
+
+  // Validate formatting
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(uname)) {
+    showFieldError('auth-username-err', 'auth-username');
+    btn.disabled = false; btn.textContent = 'Start Playing';
+    return;
+  }
+  clearFieldError('auth-username-err', 'auth-username');
+
+  // Attempt Login by Username
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_guests?username=ilike.${uname}&select=guest_id,username`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY }
+    });
+    
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    
+    if (data && data.length > 0) {
+      // Welcome back (Found Username)
+      guestId = data[0].guest_id;
+      username = data[0].username; // use exactly formatted casing from DB
+      localStorage.setItem('wc_guest', JSON.stringify({ guestId, username }));
+      showToast('Welcome back, ' + username + '! 🎉', 'success');
+      await enterGame();
+    } else {
+      // Username is new, create account
+      await createNewGuest(uname);
+    }
+  } catch (err) {
+    showToast('Connection error. Please try again.', 'error');
+    btn.disabled = false; btn.textContent = 'Start Playing';
+  }
+}
+
+async function createNewGuest(uname) {
+  guestId  = generateGuestId();
+  username = uname;
+  localStorage.setItem('wc_guest', JSON.stringify({ guestId, username }));
+  await upsertGuest(guestId, username);   // persist to DB
+  await enterGame();
+}
+
+async function upsertGuest(gId, uname) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_guests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        'x-guest-id': gId
+      },
+      body: JSON.stringify({ guest_id: gId, username: uname, last_seen: new Date().toISOString() })
+    });
+  } catch { }
+}
+
+async function supabaseRPC(fn, params) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify(params)
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function updateLeaderboard(name, word, score) {
+  await supabaseRPC('upsert_leaderboard', {
+    p_player_key: guestId,
+    p_name:       name,
+    p_is_guest:   true,  // Always true now
+    p_guest_id:   guestId,
+    p_user_id:    null,
+    p_word:       word,
+    p_score:      score,
+    p_streak: currentStreak + 1,
+    p_last_play_date: TODAY
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ENTER GAME
+// ════════════════════════════════════════════════════════════════
+async function enterGame() {
+  showScreen('screen-game');
+
+  document.getElementById('date-display').textContent =
+    new Date().toLocaleDateString('en-US', {month:'long', day:'numeric' });
+
+  // header pill
+  document.getElementById('header-username').textContent = username;
+  document.getElementById('header-avatar').textContent   = username[0].toUpperCase();
+
+  // Fetch streak from database
+  currentStreak = await fetchDatabaseStreak();
+  renderStreakBadge(currentStreak);
+
+  // already played today?
+  let saved = JSON.parse(localStorage.getItem('wc_play_' + TODAY) || 'null');
+  if (!saved) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/wordcraft_scores?game_date=eq.${TODAY}&guest_id=eq.${guestId}&select=word,score`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          saved = data[0];
+          localStorage.setItem('wc_play_' + TODAY, JSON.stringify({ word: saved.word, score: saved.score }));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching score from database:', err);
+    }
+  }
+
+  if (saved) {
+    document.getElementById('played-banner').style.display = 'block';
+    document.getElementById('played-word').textContent  = saved.word.toUpperCase();
+    document.getElementById('played-score').textContent = saved.score;
+    document.getElementById('game-card').style.opacity        = '0.5';
+    document.getElementById('game-card').style.pointerEvents  = 'none';
+  } else {
+    document.getElementById('played-banner').style.display = 'none';
+    document.getElementById('game-card').style.opacity        = '1';
+    document.getElementById('game-card').style.pointerEvents  = 'auto';
+  }
+
+  renderTiles();
+  renderPointRef();
+  loadLeaderboard();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  GAME LOGIC
+// ════════════════════════════════════════════════════════════════
+function renderTiles() {
+  const grid = document.getElementById('tiles-grid');
+  grid.innerHTML = '';
+  LETTERS.forEach((letter, i) => {
+    const t = document.createElement('div');
+    t.className = 'tile'; t.id = `tile-${i}`;
+    t.innerHTML = `<span class="tile-letter">${letter}</span><span class="tile-points">${LETTER_VALUES[letter]}</span>`;
+    t.onclick = () => clickTile(i);
+    grid.appendChild(t);
+  });
+}
+
+function clickTile(idx) {
+  const t = document.getElementById(`tile-${idx}`);
+  if (t.classList.contains('used')) return;
+  t.classList.add('used');
+  wordTiles.push({ letter: LETTERS[idx], tileIndex: idx });
+  updateWordArea(); updateScore();
+}
+
+function updateWordArea() {
+  const area = document.getElementById('word-area');
+  area.innerHTML = '';
+  if (!wordTiles.length) {
+    area.innerHTML = '<span class="placeholder">Click letters above to spell a word</span>';
+    area.classList.remove('has-word'); return;
+  }
+  area.classList.add('has-word');
+  wordTiles.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'slot-tile';
+    el.innerHTML = `<span class="tile-letter">${t.letter}</span><span class="tile-points">${LETTER_VALUES[t.letter]}</span>`;
+    el.title = 'Click to remove'; el.onclick = () => removeTile(i);
+    area.appendChild(el);
+  });
+}
+
+function removeTile(i) {
+  document.getElementById(`tile-${wordTiles[i].tileIndex}`).classList.remove('used');
+  wordTiles.splice(i, 1);
+  updateWordArea(); updateScore(); hideResult();
+}
+
+function clearWord() {
+  wordTiles.forEach(t => document.getElementById(`tile-${t.tileIndex}`).classList.remove('used'));
+  wordTiles = [];
+  updateWordArea(); updateScore(); hideResult();
+}
+
+function updateScore() {
+  const word  = wordTiles.map(t => t.letter).join('');
+  const score = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
+  document.getElementById('live-score').textContent = score;
+  document.getElementById('live-word').textContent  = word || '—';
+  document.getElementById('submit-btn').disabled    = word.length < 2;
+}
+
+async function isValidWord(word) {
+  try {
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
+    return r.ok;
+  } catch { return true; }
+}
+
+async function submitWord() {
+  const word  = wordTiles.map(t => t.letter).join('');
+  const score = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
+  if (word.length < 2) return;
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  const valid = await isValidWord(word);
+  btn.textContent = 'Submit Word'; btn.disabled = false;
+
+  const banner = document.getElementById('result-banner');
+  if (!valid) {
+    banner.className = 'result-banner invalid';
+    banner.innerHTML = `<div class="rt">Not a valid word</div><div class="rs">"${word}" wasn't found in the dictionary.</div>`;
+    return;
+  }
+
+  const multiplier  = getMultiplier(currentStreak);
+  const finalScore  = Math.ceil(score * multiplier);
+
+  banner.className = 'result-banner valid';
+  banner.innerHTML = `<div class="rt">Valid word!</div><div class="rs">"${word}" accepted — ${finalScore} pts${multiplier > 1 ? ` <span style="color:var(--gold)">(${multiplier.toFixed(1)}x streak)</span>` : ''}</div>`;
+
+  pendingScore = { word, score: finalScore };
+  document.getElementById('modal-score-num').textContent     = finalScore;
+  document.getElementById('modal-word-display').textContent  = word.toUpperCase();
+  const streakInfo = document.getElementById('modal-streak-info');
+  if (currentStreak > 1) {
+    streakInfo.textContent = `🔥 ${currentStreak}-day streak · ${multiplier.toFixed(1)}x multiplier (base: ${score} pts)`;
+    streakInfo.style.display = 'block';
+  } else {
+    streakInfo.style.display = 'none';
+  }
+  document.getElementById('submit-username-display').textContent = username;
+  document.getElementById('modal-submit').classList.add('open');
+}
+
+function closeSubmitModal() { document.getElementById('modal-submit').classList.remove('open'); }
+
+async function confirmSubmit() {
+  if (!pendingScore) return;
+  const btn = document.getElementById('confirm-submit-btn');
+  btn.disabled = true; btn.textContent = 'Posting…';
+
+  try {
+    const body = {
+      name:      username,
+      word:      pendingScore.word,
+      score:     pendingScore.score,
+      game_date: TODAY,
+      is_guest:  true,
+      guest_id:  guestId,
+      user_id:   null
+    };
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_scores`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Prefer': 'return=minimal',
+        'x-guest-id': guestId
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) throw new Error();
+
+    // Atomically update the leaderboard totals & streak in the database
+    await updateLeaderboard(username, pendingScore.word, pendingScore.score);
+
+    localStorage.setItem('wc_play_' + TODAY, JSON.stringify({ word: pendingScore.word, score: pendingScore.score }));
+
+    // Fetch the updated, official streak count directly from the database calculation
+    currentStreak = await fetchDatabaseStreak();
+    renderStreakBadge(currentStreak);
+
+    closeSubmitModal();
+    showToast('Score posted! 🎉', 'success');
+
+    document.getElementById('played-banner').style.display      = 'block';
+    document.getElementById('played-word').textContent          = pendingScore.word.toUpperCase();
+    document.getElementById('played-score').textContent         = pendingScore.score;
+    document.getElementById('game-card').style.opacity          = '0.5';
+    document.getElementById('game-card').style.pointerEvents    = 'none';
+
+    loadLeaderboard();
+  } catch {
+    showToast('Failed to post — check Supabase config.', 'error');
+    btn.disabled = false; btn.textContent = 'Post Score';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  LEADERBOARD
+// ════════════════════════════════════════════════════════════════
+async function loadLeaderboard() {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '<div class="lb-loading">Loading scores…</div>';
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?order=total_score.desc&limit=20`,
+      { headers: { 'apikey': SUPABASE_ANON_KEY } }
+    );
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    if (!data.length) { list.innerHTML = '<div class="lb-empty">No scores yet — be the first!</div>'; return; }
+
+    list.innerHTML = '';
+    data.forEach((p, i) => {
+      const isMe = p.name === username;
+      const rankCls     = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+      const rankDisplay = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+      const el = document.createElement('div');
+      el.className = `lb-row${isMe ? ' me' : ''}`;
+      el.innerHTML = `
+        <div class="lb-rank ${rankCls}">${rankDisplay}</div>
+        <div>
+          <div class="lb-name">${escHtml(p.name)}${isMe ? ' <span style="color:var(--gold);font-size:0.7rem">(you)</span>' : ''}</div>
+        </div>
+        <div class="lb-score">${p.total_score}<span class="lb-games">${p.games_played} game${p.games_played !== 1 ? 's' : ''}</span></div>`;
+      list.appendChild(el);
+    });
+  } catch {
+    list.innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores — check Supabase setup.</div>';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ACCOUNT MODAL & RENAME
+// ════════════════════════════════════════════════════════════════
+function openAccountModal() {
+  document.getElementById('modal-account').classList.add('open');
+  document.getElementById('acct-current-username').textContent = username;
+  document.getElementById('change-username').value = username;
+  document.getElementById('change-uname-check').className = 'uname-check';
+}
+function closeAccountModal() { document.getElementById('modal-account').classList.remove('open'); }
+
+function checkChangeUsername() {
+  const val = document.getElementById('change-username').value.trim();
+  const el  = document.getElementById('change-uname-check');
+  if (!val) { el.className = 'uname-check'; return; }
+  const ok = /^[a-zA-Z0-9_]{3,20}$/.test(val);
+  el.className  = 'uname-check ' + (ok ? 'ok' : 'bad');
+  el.textContent = ok ? '✓ Looks good!' : '✗ 3–20 chars, letters/numbers/underscores only';
+}
+
+async function saveChangeUsername() {
+  const uname = document.getElementById('change-username').value.trim();
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(uname)) { showToast('Invalid username.','error'); return; }
+
+  const btn = document.getElementById('change-uname-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    // 1. Check if name is taken by someone else
+    const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_guests?username=ilike.${uname}&select=guest_id`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY }
+    });
+    const checkData = await checkRes.json();
+    if (checkData && checkData.length > 0 && checkData[0].guest_id !== guestId) {
+       showToast('Username already taken.', 'error');
+       btn.disabled = false; btn.textContent = 'Save Username';
+       return;
+    }
+
+    // 2. Perform updates securely using our guest authorization headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'x-guest-id': guestId
+    };
+
+    // Update guest profile
+    await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_guests?guest_id=eq.${guestId}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ username: uname })
+    });
+    // Update leaderboard stats
+    await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?player_key=eq.${guestId}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ name: uname })
+    });
+    // Update past scores
+    await fetch(`${SUPABASE_URL}/rest/v1/wordcraft_scores?guest_id=eq.${guestId}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ name: uname })
+    });
+
+    // 3. Reflect updates on client side
+    username = uname;
+    localStorage.setItem('wc_guest', JSON.stringify({ guestId, username }));
+
+    document.getElementById('header-username').textContent = username;
+    document.getElementById('header-avatar').textContent   = username[0].toUpperCase();
+    document.getElementById('acct-current-username').textContent = username;
+    
+    showToast('Username updated! ✓','success');
+    closeAccountModal();
+    loadLeaderboard(); // refresh board to show new name
+
+  } catch {
+     showToast('Failed to update username.','error');
+  }
+  btn.disabled = false; btn.textContent = 'Save Username';
+}
+
+function signOut() {
+  localStorage.removeItem('wc_guest');
+  localStorage.removeItem('wc_play_' + TODAY);
+  guestId = null; username = null;
+  closeAccountModal();
+  
+  // RESET BUTTON STATE
+  const btn = document.getElementById('start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Start Playing';
+  
+  document.getElementById('auth-username').value = '';
+  showScreen('screen-auth');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  POINT REFERENCE
+// ════════════════════════════════════════════════════════════════
+function renderPointRef() {
+  const groups = {};
+  Object.entries(LETTER_VALUES).forEach(([l,v]) => { groups[v] = groups[v]||[]; groups[v].push(l); });
+  const ref = document.getElementById('point-ref');
+  ref.innerHTML = '';
+  Object.entries(groups).sort((a,b)=>a[0]-b[0]).forEach(([pts,letters]) => {
+    const c = document.createElement('span');
+    c.className = 'point-chip';
+    c.innerHTML = `${letters.join(', ')} = <b>${pts}pt</b>`;
+    ref.appendChild(c);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function hideResult() { document.getElementById('result-banner').className = 'result-banner'; }
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+function showFieldError(errId, inputId) { document.getElementById(errId).classList.add('show'); document.getElementById(inputId).classList.add('error'); }
+function clearFieldError(errId, inputId) { document.getElementById(errId).classList.remove('show'); document.getElementById(inputId).classList.remove('error'); }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
