@@ -254,6 +254,17 @@
   .lb-empty { text-align: center; color: var(--text-dim); font-size: 0.82rem; padding: 24px 0; }
   .lb-loading { text-align: center; color: var(--text-dim); font-size: 0.8rem; padding: 20px 0; animation: pulse 1.5s ease-in-out infinite; }
 
+  /* ── LEADERBOARD TABS ── */
+  .lb-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--slot-bg); border-radius: 10px; padding: 4px; }
+  .lb-tab {
+    flex: 1; padding: 7px 10px; border-radius: 7px; border: none; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 600;
+    color: var(--text-dim); background: transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+  .lb-tab:hover { color: var(--text); }
+  .lb-tab.active { background: var(--surface2); color: var(--cream); border: 1px solid var(--slot-border); }
+
   /* ── POINT REF ── */
   .point-ref { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
   .point-chip { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 2px 7px; background: var(--slot-bg); border: 1px solid var(--slot-border); border-radius: 4px; color: var(--text-dim); }
@@ -406,8 +417,13 @@
   <!-- LEADERBOARD -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div class="section-label" style="margin:0;">All-Time Leaderboard</div>
-      <button class="btn btn-sm btn-ghost" onclick="loadLeaderboard()">↻</button>
+      <div class="section-label" style="margin:0;">Leaderboard</div>
+      <button class="btn btn-sm btn-ghost" onclick="loadActiveLeaderboard()">↻</button>
+    </div>
+    <div class="lb-tabs">
+      <button class="lb-tab active" onclick="switchLbTab('today', this)">Today</button>
+      <button class="lb-tab" onclick="switchLbTab('month', this)">This Month</button>
+      <button class="lb-tab" onclick="switchLbTab('alltime', this)">All-Time</button>
     </div>
     <div id="lb-list"><div class="lb-loading">Loading scores…</div></div>
   </div>
@@ -459,6 +475,21 @@
 
     <div style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="closeAccountModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL: USER ALREADY EXISTS CONFIRMATION
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-user-exists">
+  <div class="modal">
+    <h3>Username found 👋</h3>
+    <p>The username <strong id="exists-username-display" style="color:var(--cream);"></strong> already exists. Do you want to continue as this user?</p>
+    <p style="margin-top:-10px;">If you mistyped, click <em>No, go back</em> to try a different name.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="cancelUserExists()">No, go back</button>
+      <button class="btn btn-primary" id="confirm-user-exists-btn" onclick="confirmUserExists()">Yes, continue</button>
     </div>
   </div>
 </div>
@@ -640,12 +671,11 @@ async function loginOrPlay() {
     const data = await res.json();
     
     if (data && data.length > 0) {
-      // Welcome back (Found Username)
-      guestId = data[0].guest_id;
-      username = data[0].username; // use exactly formatted casing from DB
-      localStorage.setItem('wc_guest', JSON.stringify({ guestId, username }));
-      showToast('Welcome back, ' + username + '! 🎉', 'success');
-      await enterGame();
+      // Username found — ask user to confirm before proceeding
+      const foundGuestId  = data[0].guest_id;
+      const foundUsername = data[0].username; // exactly as stored in DB
+      openUserExistsModal(foundUsername, foundGuestId);
+      btn.disabled = false; btn.textContent = 'Start Playing';
     } else {
       // Username is new, create account
       await createNewGuest(uname);
@@ -760,7 +790,7 @@ async function enterGame() {
 
   renderTiles();
   renderPointRef();
-  loadLeaderboard();
+  loadLeaderboardToday();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -917,7 +947,7 @@ async function confirmSubmit() {
     document.getElementById('game-card').style.opacity          = '0.5';
     document.getElementById('game-card').style.pointerEvents    = 'none';
 
-    loadLeaderboard();
+    loadActiveLeaderboard();
   } catch {
     showToast('Failed to post — check Supabase config.', 'error');
     btn.disabled = false; btn.textContent = 'Post Score';
@@ -925,8 +955,127 @@ async function confirmSubmit() {
 }
 
 // ════════════════════════════════════════════════════════════════
+//  USER EXISTS MODAL
+// ════════════════════════════════════════════════════════════════
+let _pendingExistsGuestId  = null;
+let _pendingExistsUsername = null;
+
+function openUserExistsModal(foundUsername, foundGuestId) {
+  _pendingExistsUsername = foundUsername;
+  _pendingExistsGuestId  = foundGuestId;
+  document.getElementById('exists-username-display').textContent = foundUsername;
+  document.getElementById('modal-user-exists').classList.add('open');
+}
+
+function cancelUserExists() {
+  document.getElementById('modal-user-exists').classList.remove('open');
+  _pendingExistsGuestId  = null;
+  _pendingExistsUsername = null;
+  // Put the name back so the user can correct it
+  // (field already has it, nothing extra needed)
+}
+
+async function confirmUserExists() {
+  const btn = document.getElementById('confirm-user-exists-btn');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  document.getElementById('modal-user-exists').classList.remove('open');
+
+  guestId  = _pendingExistsGuestId;
+  username = _pendingExistsUsername;
+  _pendingExistsGuestId  = null;
+  _pendingExistsUsername = null;
+
+  localStorage.setItem('wc_guest', JSON.stringify({ guestId, username }));
+  showToast('Welcome back, ' + username + '! 🎉', 'success');
+  await enterGame();
+
+  btn.disabled = false; btn.textContent = 'Yes, continue';
+}
+
+// ════════════════════════════════════════════════════════════════
 //  LEADERBOARD
 // ════════════════════════════════════════════════════════════════
+let activeLbTab = 'today';
+
+function switchLbTab(tab, btnEl) {
+  activeLbTab = tab;
+  document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+  loadActiveLeaderboard();
+}
+
+function loadActiveLeaderboard() {
+  if      (activeLbTab === 'today')   loadLeaderboardToday();
+  else if (activeLbTab === 'month')   loadLeaderboardMonth();
+  else                                loadLeaderboard();
+}
+
+// ── Shared row renderer ──────────────────────────────────────────
+function renderLbRows(data, scoreField, subField, subLabel) {
+  const list = document.getElementById('lb-list');
+  if (!data.length) { list.innerHTML = '<div class="lb-empty">No scores yet — be the first!</div>'; return; }
+  list.innerHTML = '';
+  data.forEach((p, i) => {
+    const isMe       = p.name === username;
+    const rankCls    = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+    const rankDisplay= i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+    const sub        = subField ? `<span class="lb-games">${p[subField]} ${subLabel}</span>` : '';
+    const el = document.createElement('div');
+    el.className = `lb-row${isMe ? ' me' : ''}`;
+    el.innerHTML = `
+      <div class="lb-rank ${rankCls}">${rankDisplay}</div>
+      <div><div class="lb-name">${escHtml(p.name)}${isMe ? ' <span style="color:var(--gold);font-size:0.7rem">(you)</span>' : ''}</div></div>
+      <div class="lb-score">${p[scoreField]}${sub}</div>`;
+    list.appendChild(el);
+  });
+}
+
+// ── TODAY ────────────────────────────────────────────────────────
+async function loadLeaderboardToday() {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '<div class="lb-loading">Loading scores…</div>';
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/wordcraft_scores?game_date=eq.${TODAY}&select=name,score&order=score.desc&limit=20`,
+      { headers: { 'apikey': SUPABASE_ANON_KEY } }
+    );
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    renderLbRows(data, 'score', null, '');
+  } catch {
+    document.getElementById('lb-list').innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores.</div>';
+  }
+}
+
+// ── THIS MONTH ───────────────────────────────────────────────────
+async function loadLeaderboardMonth() {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '<div class="lb-loading">Loading scores…</div>';
+  try {
+    const d = new Date();
+    const firstDay = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/wordcraft_scores?game_date=gte.${firstDay}&select=name,score&order=score.desc&limit=200`,
+      { headers: { 'apikey': SUPABASE_ANON_KEY } }
+    );
+    if (!res.ok) throw new Error();
+    const raw = await res.json();
+
+    // Aggregate: sum all scores per player this month
+    const map = {};
+    raw.forEach(r => {
+      if (!map[r.name]) map[r.name] = { name: r.name, score: 0, games: 0 };
+      map[r.name].score += r.score;
+      map[r.name].games += 1;
+    });
+    const data = Object.values(map).sort((a, b) => b.score - a.score).slice(0, 20);
+    renderLbRows(data, 'score', 'games', 'game(s)');
+  } catch {
+    document.getElementById('lb-list').innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores.</div>';
+  }
+}
+
+// ── ALL-TIME ─────────────────────────────────────────────────────
 async function loadLeaderboard() {
   const list = document.getElementById('lb-list');
   list.innerHTML = '<div class="lb-loading">Loading scores…</div>';
@@ -937,25 +1086,9 @@ async function loadLeaderboard() {
     );
     if (!res.ok) throw new Error();
     const data = await res.json();
-    if (!data.length) { list.innerHTML = '<div class="lb-empty">No scores yet — be the first!</div>'; return; }
-
-    list.innerHTML = '';
-    data.forEach((p, i) => {
-      const isMe = p.name === username;
-      const rankCls     = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
-      const rankDisplay = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
-      const el = document.createElement('div');
-      el.className = `lb-row${isMe ? ' me' : ''}`;
-      el.innerHTML = `
-        <div class="lb-rank ${rankCls}">${rankDisplay}</div>
-        <div>
-          <div class="lb-name">${escHtml(p.name)}${isMe ? ' <span style="color:var(--gold);font-size:0.7rem">(you)</span>' : ''}</div>
-        </div>
-        <div class="lb-score">${p.total_score}<span class="lb-games">${p.games_played} game${p.games_played !== 1 ? 's' : ''}</span></div>`;
-      list.appendChild(el);
-    });
+    renderLbRows(data, 'total_score', 'games_played', 'game(s)');
   } catch {
-    list.innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores — check Supabase setup.</div>';
+    document.getElementById('lb-list').innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores — check Supabase setup.</div>';
   }
 }
 
@@ -1029,7 +1162,7 @@ async function saveChangeUsername() {
     
     showToast('Username updated! ✓','success');
     closeAccountModal();
-    loadLeaderboard(); // refresh board to show new name
+    loadActiveLeaderboard(); // refresh board to show new name
 
   } catch {
      showToast('Failed to update username.','error');
