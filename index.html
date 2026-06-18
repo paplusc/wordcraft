@@ -265,6 +265,30 @@
   .lb-tab:hover { color: var(--text); }
   .lb-tab.active { background: var(--surface2); color: var(--cream); border: 1px solid var(--slot-border); }
 
+  /* ── MY STATS ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .stat-box {
+    background: var(--slot-bg);
+    border: 1px solid var(--slot-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat-box.full { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+  .stat-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 700; color: var(--cream); line-height: 1.1; }
+  .stat-value.gold { color: var(--gold); }
+  .stat-value.sm   { font-size: 1rem; }
+  .stat-sub  { font-size: 0.68rem; color: var(--text-dim); margin-top: 1px; }
+  .stats-divider { border: none; border-top: 1px solid var(--slot-border); margin: 10px 0; }
+
   /* ── BONUS TILE ── */
   .bonus-tile {
     border-color: var(--gold) !important;
@@ -434,6 +458,17 @@
     <div class="point-ref" id="point-ref"></div>
   </div>
 
+  <!-- MY STATS -->
+  <div class="card" id="stats-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="section-label" style="margin:0;">My Stats</div>
+      <button class="btn btn-sm btn-ghost" onclick="loadUserStats()">↻</button>
+    </div>
+    <div id="stats-body">
+      <div class="lb-loading">Loading your stats…</div>
+    </div>
+  </div>
+
   <!-- LEADERBOARD -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -524,10 +559,51 @@ const SUPABASE_URL     = 'https://klgwoptjhewdzcvpyvkw.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_5T3nxxvl8G4SWhz4ZizhKQ_rxTFRRtB';
 
 /*
-  ── Supabase SQL setup (Simplified for Guest-only flow) ──────────
+  ── Supabase SQL setup ────────────────────────────────────────────
 
-  (If you've already created the tables from the previous version, 
-   no structural DB changes are strictly needed, but email/auth policies are no longer used).
+  1. Add max_streak column (run once):
+  ─────────────────────────────────────
+  ALTER TABLE wordcraft_leaderboard
+    ADD COLUMN IF NOT EXISTS max_streak INT NOT NULL DEFAULT 1;
+
+  -- Back-fill existing rows so max_streak >= streak_count
+  UPDATE wordcraft_leaderboard
+    SET max_streak = GREATEST(max_streak, streak_count);
+
+  2. Updated upsert_leaderboard RPC (replace existing function):
+  ──────────────────────────────────────────────────────────────
+  CREATE OR REPLACE FUNCTION upsert_leaderboard(
+    p_player_key     TEXT,
+    p_name           TEXT,
+    p_is_guest       BOOLEAN,
+    p_guest_id       TEXT,
+    p_user_id        UUID,
+    p_word           TEXT,
+    p_score          INT,
+    p_streak         INT,
+    p_last_play_date DATE
+  ) RETURNS VOID AS $$
+  BEGIN
+    INSERT INTO wordcraft_leaderboard
+      (player_key, name, is_guest, guest_id, user_id,
+       best_word, best_score, total_score, games_played,
+       streak_count, streak_last_date, max_streak)
+    VALUES
+      (p_player_key, p_name, p_is_guest, p_guest_id, p_user_id,
+       p_word, p_score, p_score, 1,
+       p_streak, p_last_play_date, p_streak)
+    ON CONFLICT (player_key) DO UPDATE SET
+      name             = EXCLUDED.name,
+      total_score      = wordcraft_leaderboard.total_score + EXCLUDED.total_score,
+      games_played     = wordcraft_leaderboard.games_played + 1,
+      best_word        = CASE WHEN EXCLUDED.best_score > wordcraft_leaderboard.best_score
+                              THEN EXCLUDED.best_word  ELSE wordcraft_leaderboard.best_word  END,
+      best_score       = GREATEST(wordcraft_leaderboard.best_score, EXCLUDED.best_score),
+      streak_count     = EXCLUDED.streak_count,
+      streak_last_date = EXCLUDED.streak_last_date,
+      max_streak       = GREATEST(wordcraft_leaderboard.max_streak, EXCLUDED.streak_count);
+  END;
+  $$ LANGUAGE plpgsql SECURITY DEFINER;
 */
 
 // ════════════════════════════════════════════════════════════════
@@ -620,6 +696,7 @@ const IS_BONUS_DAY = BONUS_TILE_INDEX !== null;
 let wordTiles       = [];
 let pendingScore    = null;
 let currentStreak   = 1;
+let maxStreak       = 1;
 
 let guestId      = null;   
 let username     = null;   
@@ -632,19 +709,18 @@ async function fetchDatabaseStreak() {
 
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?player_key=eq.${guestId}&select=streak_count,streak_last_date`,
-      {
-        headers: { 'apikey': SUPABASE_ANON_KEY }
-      }
+      `${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?player_key=eq.${guestId}&select=streak_count,streak_last_date,max_streak`,
+      { headers: { 'apikey': SUPABASE_ANON_KEY } }
     );
     if (res.ok) {
       const data = await res.json();
       if (data && data.length > 0) {
         const record = data[0];
-        const lastDate = record.streak_last_date; // YYYY-MM-DD
+        const lastDate = record.streak_last_date;
         const yesterday = getYesterdayString();
 
-        // If the streak is still current
+        maxStreak = record.max_streak || 1;
+
         if (lastDate === TODAY || lastDate === yesterday) {
           return record.streak_count || 1;
         }
@@ -839,6 +915,7 @@ async function enterGame() {
   renderTiles();
   renderPointRef();
   loadLeaderboardToday();
+  loadUserStats();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -898,6 +975,7 @@ function clearWord() {
 function updateScore() {
   const word  = wordTiles.map(t => t.letter).join('');
   const usesBonus = IS_BONUS_DAY && wordTiles.some(t => t.tileIndex === BONUS_TILE_INDEX);
+  const base  = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
   const score = usesBonus ? base * 2 : base;
   document.getElementById('live-score').textContent = score + (usesBonus ? ' ✕2🌟' : '');
   document.getElementById('live-word').textContent  = word || '—';
@@ -1006,6 +1084,8 @@ async function confirmSubmit() {
     document.getElementById('game-card').style.pointerEvents    = 'none';
 
     loadActiveLeaderboard();
+    loadUserStats();
+
   } catch {
     showToast('Failed to post — check Supabase config.', 'error');
     btn.disabled = false; btn.textContent = 'Post Score';
@@ -1147,6 +1227,192 @@ async function loadLeaderboard() {
     renderLbRows(data, 'total_score', 'games_played', 'game(s)');
   } catch {
     document.getElementById('lb-list').innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load scores — check Supabase setup.</div>';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  USER STATS
+// ════════════════════════════════════════════════════════════════
+async function loadUserStats() {
+  const body = document.getElementById('stats-body');
+  body.innerHTML = '<div class="lb-loading">Loading your stats…</div>';
+  if (!username) { body.innerHTML = '<div class="lb-empty">Log in to see your stats.</div>'; return; }
+
+  try {
+    const d        = new Date();
+    const firstDay = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+
+    // Fetch all scores for this user (all-time) + all three rankings in parallel
+    const [res, todayLb, monthLb, alltimeLb] = await Promise.all([
+      // User's own scores
+      fetch(
+        `${SUPABASE_URL}/rest/v1/wordcraft_scores?name=eq.${encodeURIComponent(username)}&select=word,score,game_date&order=game_date.desc`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY } }
+      ),
+      // Today's full leaderboard (scores only, to count rank)
+      fetch(
+        `${SUPABASE_URL}/rest/v1/wordcraft_scores?game_date=eq.${TODAY}&select=name,score&order=score.desc`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY } }
+      ),
+      // This month's scores (for aggregation)
+      fetch(
+        `${SUPABASE_URL}/rest/v1/wordcraft_scores?game_date=gte.${firstDay}&select=name,score&order=score.desc&limit=1000`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY } }
+      ),
+      // All-time leaderboard
+      fetch(
+        `${SUPABASE_URL}/rest/v1/wordcraft_leaderboard?select=name,total_score&order=total_score.desc`,
+        { headers: { 'apikey': SUPABASE_ANON_KEY } }
+      )
+    ]);
+
+    if (!res.ok) throw new Error();
+    const all = await res.json();
+
+    // ── Derive personal stats ─────────────────────────────────────
+    const todayStr   = TODAY;
+    const todayEntry = all.find(r => r.game_date === todayStr);
+
+    const monthScores = all.filter(r => r.game_date >= firstDay);
+    const monthTotal  = monthScores.reduce((s, r) => s + r.score, 0);
+    const monthGames  = monthScores.length;
+
+    const allTotal = all.reduce((s, r) => s + r.score, 0);
+    const allGames = all.length;
+
+    const best = all.reduce((b, r) => (!b || r.score > b.score) ? r : b, null);
+
+    // ── Derive rankings ───────────────────────────────────────────
+    function rankLabel(pos, total) {
+      if (pos === null) return '—';
+      return `#${pos}${total ? ' / ' + total : ''}`;
+    }
+
+    // Today rank
+    let rankToday = null, totalToday = null;
+    if (todayLb.ok) {
+      const rows = await todayLb.json();
+      totalToday = rows.length;
+      const idx = rows.findIndex(r => r.name === username);
+      if (idx !== -1) rankToday = idx + 1;
+    }
+
+    // Month rank — aggregate client-side same as leaderboard
+    let rankMonth = null, totalMonth = null;
+    if (monthLb.ok) {
+      const rows = await monthLb.json();
+      const map = {};
+      rows.forEach(r => {
+        if (!map[r.name]) map[r.name] = 0;
+        map[r.name] += r.score;
+      });
+      const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+      totalMonth = sorted.length;
+      const idx = sorted.findIndex(([name]) => name === username);
+      if (idx !== -1) rankMonth = idx + 1;
+    }
+
+    // All-time rank
+    let rankAll = null, totalAll = null;
+    if (alltimeLb.ok) {
+      const rows = await alltimeLb.json();
+      totalAll = rows.length;
+      const idx = rows.findIndex(r => r.name === username);
+      if (idx !== -1) rankAll = idx + 1;
+    }
+
+    // ── Render ────────────────────────────────────────────────────
+    body.innerHTML = `
+      <div class="stats-grid">
+
+        <div class="stat-box full">
+          <div>
+            <div class="stat-label">🔥 Current streak</div>
+            <div class="stat-value gold">${currentStreak} day${currentStreak !== 1 ? 's' : ''}</div>
+            <div class="stat-sub">${getMultiplier(currentStreak).toFixed(1)}x multiplier</div>
+          </div>
+          <div style="text-align:right">
+            <div class="stat-label">🏅 Best streak ever</div>
+            <div class="stat-value gold">${maxStreak} day${maxStreak !== 1 ? 's' : ''}</div>
+            <div class="stat-sub">${getMultiplier(maxStreak).toFixed(1)}x peak multiplier</div>
+          </div>
+        </div>
+
+        <hr class="stats-divider" style="grid-column:1/-1;margin:2px 0 4px">
+
+        <div class="stat-box" style="grid-column:1/-1">
+          <div class="stat-label" style="margin-bottom:10px;">📊 Your rankings</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+            <div>
+              <div class="stat-label">Today</div>
+              <div class="stat-value ${rankToday === 1 ? 'gold' : ''}" style="font-size:1.5rem">${rankToday ? '#' + rankToday : '—'}</div>
+              <div class="stat-sub">${totalToday !== null ? 'of ' + totalToday + ' players' : ''}</div>
+            </div>
+            <div style="border-left:1px solid var(--slot-border);border-right:1px solid var(--slot-border)">
+              <div class="stat-label">This month</div>
+              <div class="stat-value ${rankMonth === 1 ? 'gold' : ''}" style="font-size:1.5rem">${rankMonth ? '#' + rankMonth : '—'}</div>
+              <div class="stat-sub">${totalMonth !== null ? 'of ' + totalMonth + ' players' : ''}</div>
+            </div>
+            <div>
+              <div class="stat-label">All-time</div>
+              <div class="stat-value ${rankAll === 1 ? 'gold' : ''}" style="font-size:1.5rem">${rankAll ? '#' + rankAll : '—'}</div>
+              <div class="stat-sub">${totalAll !== null ? 'of ' + totalAll + ' players' : ''}</div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="stats-divider" style="grid-column:1/-1;margin:2px 0 4px">
+
+        <div class="stat-box full">
+          <div>
+            <div class="stat-label">Today's word</div>
+            <div class="stat-value sm">${todayEntry ? todayEntry.word.toUpperCase() : '—'}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="stat-label">Today's score</div>
+            <div class="stat-value gold">${todayEntry ? todayEntry.score : '—'}</div>
+          </div>
+        </div>
+
+        <div class="stat-box full" style="border-color:var(--gold-dim)">
+          <div>
+            <div class="stat-label">🏆 Best word ever</div>
+            <div class="stat-value sm">${best ? best.word.toUpperCase() : '—'}</div>
+            <div class="stat-sub">${best ? best.game_date : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="stat-label">Points</div>
+            <div class="stat-value gold">${best ? best.score : '—'}</div>
+          </div>
+        </div>
+
+        <hr class="stats-divider" style="grid-column:1/-1;margin:2px 0 4px">
+
+        <div class="stat-box">
+          <div class="stat-label">Monthly total</div>
+          <div class="stat-value">${monthTotal.toLocaleString()}</div>
+          <div class="stat-sub">pts this month</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Games this month</div>
+          <div class="stat-value">${monthGames}</div>
+          <div class="stat-sub">${monthGames === 1 ? 'game' : 'games'} played</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-label">All-time total</div>
+          <div class="stat-value">${allTotal.toLocaleString()}</div>
+          <div class="stat-sub">pts all time</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Games all time</div>
+          <div class="stat-value">${allGames}</div>
+          <div class="stat-sub">${allGames === 1 ? 'game' : 'games'} played</div>
+        </div>
+
+      </div>`;
+  } catch {
+    body.innerHTML = '<div class="lb-empty" style="color:var(--red)">⚠ Couldn\'t load stats.</div>';
   }
 }
 
