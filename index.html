@@ -265,6 +265,26 @@
   .lb-tab:hover { color: var(--text); }
   .lb-tab.active { background: var(--surface2); color: var(--cream); border: 1px solid var(--slot-border); }
 
+  /* ── BONUS TILE ── */
+  .bonus-tile {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 10px 2px rgba(212,175,55,0.45), 0 4px 0 var(--tile-shadow) !important;
+    background: linear-gradient(145deg, #fffbe8, #f5e98a) !important;
+  }
+  .bonus-badge {
+    position: absolute;
+    top: -8px; right: -8px;
+    background: var(--gold);
+    color: #1a1200;
+    font-size: 0.6rem;
+    font-weight: 800;
+    border-radius: 5px;
+    padding: 1px 4px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+  }
+  .tile { position: relative; }
+
   /* ── POINT REF ── */
   .point-ref { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
   .point-chip { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 2px 7px; background: var(--slot-bg); border: 1px solid var(--slot-border); border-radius: 4px; color: var(--text-dim); }
@@ -569,6 +589,34 @@ function generateGuestUsername() {
 // ════════════════════════════════════════════════════════════════
 const TODAY   = getDayString();
 const LETTERS = getTodaysLetters();
+
+// ── Bonus day: 3 random days/week, same for everyone ────────────
+// Seed = "YYYY-Www" so the same 3 days are picked all week long.
+const BONUS_TILE_INDEX = (() => {
+  const d = new Date();
+  // ISO week number
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+  const weekNo = Math.ceil(((tmp - new Date(Date.UTC(tmp.getUTCFullYear(),0,1))) / 86400000 + 1) / 7);
+  const weekSeed = hashStr(`${d.getFullYear()}-W${weekNo}-wordcraft-bonus`);
+  const rng = seededRng(weekSeed);
+
+  // Pick 3 distinct weekday indices (0=Sun … 6=Sat)
+  const days = [0,1,2,3,4,5,6];
+  const bonusDays = [];
+  for (let i = 0; i < 3; i++) {
+    const idx = Math.floor(rng() * days.length);
+    bonusDays.push(days.splice(idx, 1)[0]);
+  }
+
+  const todayWeekday = d.getDay(); // 0=Sun … 6=Sat
+  if (!bonusDays.includes(todayWeekday)) return null; // not a bonus day
+
+  // It IS a bonus day — pick which tile gets x2
+  return Math.floor(rng() * LETTERS.length);
+})();
+
+const IS_BONUS_DAY = BONUS_TILE_INDEX !== null;
 let wordTiles       = [];
 let pendingScore    = null;
 let currentStreak   = 1;
@@ -801,8 +849,10 @@ function renderTiles() {
   grid.innerHTML = '';
   LETTERS.forEach((letter, i) => {
     const t = document.createElement('div');
-    t.className = 'tile'; t.id = `tile-${i}`;
-    t.innerHTML = `<span class="tile-letter">${letter}</span><span class="tile-points">${LETTER_VALUES[letter]}</span>`;
+    const isBonus = IS_BONUS_DAY && i === BONUS_TILE_INDEX;
+    t.className = 'tile' + (isBonus ? ' bonus-tile' : '');
+    t.id = `tile-${i}`;
+    t.innerHTML = `<span class="tile-letter">${letter}</span><span class="tile-points">${LETTER_VALUES[letter]}${isBonus ? '' : ''}</span>${isBonus ? '<span class="bonus-badge">✕2</span>' : ''}`;
     t.onclick = () => clickTile(i);
     grid.appendChild(t);
   });
@@ -847,8 +897,9 @@ function clearWord() {
 
 function updateScore() {
   const word  = wordTiles.map(t => t.letter).join('');
-  const score = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
-  document.getElementById('live-score').textContent = score;
+  const usesBonus = IS_BONUS_DAY && wordTiles.some(t => t.tileIndex === BONUS_TILE_INDEX);
+  const score = usesBonus ? base * 2 : base;
+  document.getElementById('live-score').textContent = score + (usesBonus ? ' ✕2🌟' : '');
   document.getElementById('live-word').textContent  = word || '—';
   document.getElementById('submit-btn').disabled    = word.length < 2;
 }
@@ -862,7 +913,9 @@ async function isValidWord(word) {
 
 async function submitWord() {
   const word  = wordTiles.map(t => t.letter).join('');
-  const score = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
+  const base  = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
+  const usesBonus = IS_BONUS_DAY && wordTiles.some(t => t.tileIndex === BONUS_TILE_INDEX);
+  const bonusScore = usesBonus ? base * 2 : base;
   if (word.length < 2) return;
 
   const btn = document.getElementById('submit-btn');
@@ -878,17 +931,22 @@ async function submitWord() {
   }
 
   const multiplier  = getMultiplier(currentStreak);
-  const finalScore  = Math.ceil(score * multiplier);
+  const finalScore  = Math.ceil(bonusScore * multiplier);
 
+  const bonusPart   = usesBonus  ? ` <span style="color:var(--gold)">✕2 bonus!</span>` : '';
+  const streakPart  = multiplier > 1 ? ` <span style="color:var(--gold)">(${multiplier.toFixed(1)}x streak)</span>` : '';
   banner.className = 'result-banner valid';
-  banner.innerHTML = `<div class="rt">Valid word!</div><div class="rs">"${word}" accepted — ${finalScore} pts${multiplier > 1 ? ` <span style="color:var(--gold)">(${multiplier.toFixed(1)}x streak)</span>` : ''}</div>`;
+  banner.innerHTML = `<div class="rt">Valid word!</div><div class="rs">"${word}" accepted — ${finalScore} pts${bonusPart}${streakPart}</div>`;
 
   pendingScore = { word, score: finalScore };
   document.getElementById('modal-score-num').textContent     = finalScore;
   document.getElementById('modal-word-display').textContent  = word.toUpperCase();
   const streakInfo = document.getElementById('modal-streak-info');
   if (currentStreak > 1) {
-    streakInfo.textContent = `🔥 ${currentStreak}-day streak · ${multiplier.toFixed(1)}x multiplier (base: ${score} pts)`;
+    streakInfo.textContent = `🔥 ${currentStreak}-day streak · ${multiplier.toFixed(1)}x multiplier (base: ${base} pts${usesBonus ? ', x2 bonus applied' : ''})`;
+    streakInfo.style.display = 'block';
+  } else if (usesBonus) {
+    streakInfo.textContent = `🌟 x2 bonus letter used! (base: ${base} pts → ${bonusScore} pts)`;
     streakInfo.style.display = 'block';
   } else {
     streakInfo.style.display = 'none';
