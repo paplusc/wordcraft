@@ -289,25 +289,68 @@
   .stat-sub  { font-size: 0.68rem; color: var(--text-dim); margin-top: 1px; }
   .stats-divider { border: none; border-top: 1px solid var(--slot-border); margin: 10px 0; }
 
-  /* ── BONUS TILE ── */
-  .bonus-tile {
+  /* ── BONUS TILES ── */
+  .tile { position: relative; }
+
+  /* Letter bonuses (+N) — green tint */
+  .bonus-plus {
+    border-color: #4CAF7D !important;
+    box-shadow: 0 0 10px 2px rgba(76,175,125,0.4), 0 4px 0 var(--tile-shadow) !important;
+    background: linear-gradient(145deg, #e8fff3, #b8f5d6) !important;
+  }
+  /* Letter bonuses (-N) — red tint */
+  .bonus-minus {
+    border-color: #E05252 !important;
+    box-shadow: 0 0 10px 2px rgba(224,82,82,0.4), 0 4px 0 var(--tile-shadow) !important;
+    background: linear-gradient(145deg, #fff0f0, #fdc8c8) !important;
+  }
+  /* Word multiplier bonus (×N > 1) — gold tint */
+  .bonus-mult-pos {
     border-color: var(--gold) !important;
     box-shadow: 0 0 10px 2px rgba(212,175,55,0.45), 0 4px 0 var(--tile-shadow) !important;
     background: linear-gradient(145deg, #fffbe8, #f5e98a) !important;
   }
+  /* Word multiplier bonus (×N < 1) — purple tint */
+  .bonus-mult-neg {
+    border-color: #9B7FDB !important;
+    box-shadow: 0 0 10px 2px rgba(155,127,219,0.45), 0 4px 0 var(--tile-shadow) !important;
+    background: linear-gradient(145deg, #f3eeff, #d8c8f8) !important;
+  }
+
   .bonus-badge {
     position: absolute;
-    top: -8px; right: -8px;
-    background: var(--gold);
-    color: #1a1200;
-    font-size: 0.6rem;
+    top: -9px; right: -9px;
+    font-size: 0.58rem;
     font-weight: 800;
     border-radius: 5px;
-    padding: 1px 4px;
+    padding: 2px 5px;
     letter-spacing: 0.02em;
     pointer-events: none;
+    white-space: nowrap;
+    z-index: 2;
+    border: 1.5px solid rgba(0,0,0,0.08);
   }
-  .tile { position: relative; }
+  .bonus-badge.bp { background: #4CAF7D; color: #fff; }
+  .bonus-badge.bm { background: #E05252; color: #fff; }
+  .bonus-badge.bx { background: var(--gold); color: #1a1200; }
+  .bonus-badge.bxn { background: #9B7FDB; color: #fff; }
+
+  /* Slot-tile bonus indicator in word area */
+  .slot-bonus {
+    position: absolute;
+    top: -7px; right: -7px;
+    font-size: 0.5rem;
+    font-weight: 800;
+    border-radius: 4px;
+    padding: 1px 4px;
+    pointer-events: none;
+    z-index: 2;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .slot-bonus.bp { background: #4CAF7D; color: #fff; }
+  .slot-bonus.bm { background: #E05252; color: #fff; }
+  .slot-bonus.bx { background: var(--gold); color: #1a1200; }
+  .slot-bonus.bxn { background: #9B7FDB; color: #fff; }
 
   /* ── POINT REF ── */
   .point-ref { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
@@ -666,33 +709,47 @@ function generateGuestUsername() {
 const TODAY   = getDayString();
 const LETTERS = getTodaysLetters();
 
-// ── Bonus day: 3 random days/week, same for everyone ────────────
-// Seed = "YYYY-Www" so the same 3 days are picked all week long.
-const BONUS_TILE_INDEX = (() => {
-  const d = new Date();
-  // ISO week number
-  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
-  const weekNo = Math.ceil(((tmp - new Date(Date.UTC(tmp.getUTCFullYear(),0,1))) / 86400000 + 1) / 7);
-  const weekSeed = hashStr(`${d.getFullYear()}-W${weekNo}-wordcraft-bonus`);
-  const rng = seededRng(weekSeed);
+// ── Daily bonus tiles — seeded so every player sees the same bonuses ────
+// Exactly 3 bonus tiles per day, one from each pool:
+//   PLUS pool  (+1/+2/+3)          → green tile
+//   TIMES pool (×3)                → gold tile
+//   NEG pool   (-1/-2/-3/×½/×⅕)   → red or purple tile
+const TILE_BONUSES = (() => {
+  const daySeed = hashStr(getDayString() + 'wordcraft-bonuses-v2');
+  const rng = seededRng(daySeed);
 
-  // Pick 3 distinct weekday indices (0=Sun … 6=Sat)
-  const days = [0,1,2,3,4,5,6];
-  const bonusDays = [];
-  for (let i = 0; i < 3; i++) {
-    const idx = Math.floor(rng() * days.length);
-    bonusDays.push(days.splice(idx, 1)[0]);
-  }
+  // Three separate pools
+  const plusPool = [
+    { type:'letter', delta:+1, cls:'bp', label:'+1' },
+    { type:'letter', delta:+2, cls:'bp', label:'+2' },
+    { type:'letter', delta:+3, cls:'bp', label:'+3' },
+  ];
+  const timesPool = [
+    { type:'mult', factor:3, cls:'bx', label:'×3' },
+    { type:'mult', factor:2, cls:'bx', label:'×2' }
+  ];
+  const negPool = [
+    { type:'letter', delta:-1,  cls:'bm', label:'−1' },
+    { type:'letter', delta:-2,  cls:'bm', label:'−2' },
+    { type:'letter', delta:-3,  cls:'bm', label:'−3' }
+  ];
 
-  const todayWeekday = d.getDay(); // 0=Sun … 6=Sat
-  if (!bonusDays.includes(todayWeekday)) return null; // not a bonus day
+  // Pick one bonus from each pool, assigned to 3 distinct tile indices
+  const availableIndices = [...Array(LETTERS.length).keys()];
+  const bonusMap = {};
 
-  // It IS a bonus day — pick which tile gets x2
-  return Math.floor(rng() * LETTERS.length);
+  const pick = (pool) => {
+    const tIdx = availableIndices.splice(Math.floor(rng() * availableIndices.length), 1)[0];
+    const bDef = pool[Math.floor(rng() * pool.length)];
+    bonusMap[tIdx] = { ...bDef };
+  };
+
+  pick(plusPool);
+  pick(timesPool);
+  pick(negPool);
+
+  return bonusMap; // { tileIndex: bonusDef, ... }
 })();
-
-const IS_BONUS_DAY = BONUS_TILE_INDEX !== null;
 let wordTiles       = [];
 let pendingScore    = null;
 let currentStreak   = 1;
@@ -921,15 +978,25 @@ async function enterGame() {
 // ════════════════════════════════════════════════════════════════
 //  GAME LOGIC
 // ════════════════════════════════════════════════════════════════
+function tileClassForBonus(bonus) {
+  if (!bonus) return '';
+  if (bonus.type === 'letter') return bonus.delta > 0 ? ' bonus-plus' : ' bonus-minus';
+  if (bonus.type === 'mult')   return bonus.factor > 1 ? ' bonus-mult-pos' : ' bonus-mult-neg';
+  return '';
+}
+
 function renderTiles() {
   const grid = document.getElementById('tiles-grid');
   grid.innerHTML = '';
   LETTERS.forEach((letter, i) => {
+    const bonus = TILE_BONUSES[i] || null;
     const t = document.createElement('div');
-    const isBonus = IS_BONUS_DAY && i === BONUS_TILE_INDEX;
-    t.className = 'tile' + (isBonus ? ' bonus-tile' : '');
+    t.className = 'tile' + tileClassForBonus(bonus);
     t.id = `tile-${i}`;
-    t.innerHTML = `<span class="tile-letter">${letter}</span><span class="tile-points">${LETTER_VALUES[letter]}${isBonus ? '' : ''}</span>${isBonus ? '<span class="bonus-badge">✕2</span>' : ''}`;
+    const badgeHtml = bonus
+      ? `<span class="bonus-badge ${bonus.cls}">${bonus.label}</span>`
+      : '';
+    t.innerHTML = `<span class="tile-letter">${letter}</span><span class="tile-points">${LETTER_VALUES[letter]}</span>${badgeHtml}`;
     t.onclick = () => clickTile(i);
     grid.appendChild(t);
   });
@@ -952,9 +1019,13 @@ function updateWordArea() {
   }
   area.classList.add('has-word');
   wordTiles.forEach((t, i) => {
+    const bonus = TILE_BONUSES[t.tileIndex] || null;
     const el = document.createElement('div');
     el.className = 'slot-tile';
-    el.innerHTML = `<span class="tile-letter">${t.letter}</span><span class="tile-points">${LETTER_VALUES[t.letter]}</span>`;
+    const slotBadge = bonus
+      ? `<span class="slot-bonus ${bonus.cls}">${bonus.label}</span>`
+      : '';
+    el.innerHTML = `<span class="tile-letter">${t.letter}</span><span class="tile-points">${LETTER_VALUES[t.letter]}</span>${slotBadge}`;
     el.title = 'Click to remove'; el.onclick = () => removeTile(i);
     area.appendChild(el);
   });
@@ -972,12 +1043,36 @@ function clearWord() {
   updateWordArea(); updateScore(); hideResult();
 }
 
+// Apply bonuses in the order tiles were added (combo mechanics)
+// Returns { score, breakdown } where breakdown is an array of step strings
+function computeBonusScore(tiles) {
+  let running = 0;
+  const steps = [];
+  tiles.forEach(t => {
+    const baseVal = LETTER_VALUES[t.letter];
+    const bonus   = TILE_BONUSES[t.tileIndex] || null;
+    if (!bonus) {
+      running += baseVal;
+      steps.push({ letter: t.letter, val: baseVal, bonus: null, after: running });
+    } else if (bonus.type === 'letter') {
+      const added = baseVal + bonus.delta;
+      running += added;
+      steps.push({ letter: t.letter, val: added, bonus, after: running });
+    } else if (bonus.type === 'mult') {
+      // First add the letter's base value, then multiply running total
+      running += baseVal;
+      running = Math.round(running * bonus.factor * 10) / 10;
+      steps.push({ letter: t.letter, val: baseVal, bonus, after: running });
+    }
+  });
+  return { score: Math.round(running), steps };
+}
+
 function updateScore() {
   const word  = wordTiles.map(t => t.letter).join('');
-  const usesBonus = IS_BONUS_DAY && wordTiles.some(t => t.tileIndex === BONUS_TILE_INDEX);
-  const base  = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
-  const score = usesBonus ? base * 2 : base;
-  document.getElementById('live-score').textContent = score + (usesBonus ? ' ✕2🌟' : '');
+  const { score, steps } = computeBonusScore(wordTiles);
+  const hasBonus = steps.some(s => s.bonus !== null);
+  document.getElementById('live-score').textContent = score + (hasBonus ? ' ✨' : '');
   document.getElementById('live-word').textContent  = word || '—';
   document.getElementById('submit-btn').disabled    = word.length < 2;
 }
@@ -990,10 +1085,7 @@ async function isValidWord(word) {
 }
 
 async function submitWord() {
-  const word  = wordTiles.map(t => t.letter).join('');
-  const base  = wordTiles.reduce((s, t) => s + LETTER_VALUES[t.letter], 0);
-  const usesBonus = IS_BONUS_DAY && wordTiles.some(t => t.tileIndex === BONUS_TILE_INDEX);
-  const bonusScore = usesBonus ? base * 2 : base;
+  const word = wordTiles.map(t => t.letter).join('');
   if (word.length < 2) return;
 
   const btn = document.getElementById('submit-btn');
@@ -1008,23 +1100,35 @@ async function submitWord() {
     return;
   }
 
+  const { score: bonusScore, steps } = computeBonusScore(wordTiles);
   const multiplier  = getMultiplier(currentStreak);
   const finalScore  = Math.ceil(bonusScore * multiplier);
+  const hasBonus    = steps.some(s => s.bonus !== null);
 
-  const bonusPart   = usesBonus  ? ` <span style="color:var(--gold)">✕2 bonus!</span>` : '';
-  const streakPart  = multiplier > 1 ? ` <span style="color:var(--gold)">(${multiplier.toFixed(1)}x streak)</span>` : '';
+  // Build a combo breakdown string for display
+  let comboText = '';
+  if (hasBonus) {
+    comboText = steps.map(s => {
+      if (!s.bonus) return `${s.letter}(+${LETTER_VALUES[s.letter]})`;
+      if (s.bonus.type === 'letter') return `${s.letter}(${s.bonus.delta >= 0 ? '+' : ''}${LETTER_VALUES[s.letter]+s.bonus.delta}<span style="font-size:0.75em;opacity:0.8">${s.bonus.label}</span>)`;
+      return `${s.letter}(→${s.after}<span style="font-size:0.75em;opacity:0.8">${s.bonus.label}</span>)`;
+    }).join(' ');
+  }
+
+  const streakPart = multiplier > 1 ? ` <span style="color:var(--gold)">(🔥${multiplier.toFixed(1)}x streak)</span>` : '';
   banner.className = 'result-banner valid';
-  banner.innerHTML = `<div class="rt">Valid word!</div><div class="rs">"${word}" accepted — ${finalScore} pts${bonusPart}${streakPart}</div>`;
+  banner.innerHTML = `<div class="rt">Valid word! ✨</div><div class="rs">"${word}" — ${finalScore} pts${hasBonus ? ` <span style="color:var(--gold)">✨ bonus combo!</span>` : ''}${streakPart}</div>${hasBonus ? `<div class="rs" style="margin-top:4px;font-size:0.72rem;opacity:0.75">${comboText}</div>` : ''}`;
 
   pendingScore = { word, score: finalScore };
   document.getElementById('modal-score-num').textContent     = finalScore;
   document.getElementById('modal-word-display').textContent  = word.toUpperCase();
   const streakInfo = document.getElementById('modal-streak-info');
-  if (currentStreak > 1) {
-    streakInfo.textContent = `🔥 ${currentStreak}-day streak · ${multiplier.toFixed(1)}x multiplier (base: ${base} pts${usesBonus ? ', x2 bonus applied' : ''})`;
-    streakInfo.style.display = 'block';
-  } else if (usesBonus) {
-    streakInfo.textContent = `🌟 x2 bonus letter used! (base: ${base} pts → ${bonusScore} pts)`;
+
+  const infoParts = [];
+  if (currentStreak > 1) infoParts.push(`🔥 ${currentStreak}-day streak · ${multiplier.toFixed(1)}x`);
+  if (hasBonus) infoParts.push(`✨ bonus tiles applied (${bonusScore} pts before streak)`);
+  if (infoParts.length) {
+    streakInfo.innerHTML = infoParts.join(' &nbsp;·&nbsp; ');
     streakInfo.style.display = 'block';
   } else {
     streakInfo.style.display = 'none';
